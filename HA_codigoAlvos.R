@@ -1,8 +1,51 @@
+# ============================================================
+# PIPELINE DE EXTRAÇÃO E NORMALIZAÇÃO DE ALVOS DE CONSERVAÇÃO
+# ============================================================
+#
+# Este script realiza a leitura, estruturação e normalização
+# de listas de alvos de conservação extraídas de arquivos CSV
+# derivados de PDFs institucionais.
+#
+# O objetivo é transformar um texto originalmente não estruturado
+# (com múltiplas UPs e diferentes componentes misturados)
+# em um dataframe estruturado em formato longo, contendo:
+#
+#   UP | Tipo | Conteudo
+#
+# Onde:
+#   UP        → Unidade de Planejamento
+#   Tipo      → componente (Fauna, Flora, Fitofisionomias, Ambientes)
+#   Conteudo  → alvo individual
+#
+# O pipeline realiza:
+#
+# 1) leitura do arquivo bruto
+# 2) reconstrução de blocos de texto por UP
+# 3) separação dos componentes temáticos
+# 4) transformação para formato longo
+# 5) limpeza e normalização textual
+# 6) aplicação de correções conhecidas
+# 7) exportação do resultado final
+#
+# ============================================================
+
+
+# ============================================================
+# 0) Carregamento de bibliotecas
+# ============================================================
+
+# readr  → leitura e escrita eficiente de arquivos
+# dplyr  → manipulação de dataframes
+# stringr → manipulação de strings com regex
+# tidyr  → transformação estrutural de tabelas
+# purrr  → programação funcional (não usado diretamente aqui,
+#          mas frequentemente necessário em pipelines similares)
+
 library(readr)
 library(dplyr)
 library(stringr)
 library(tidyr)
-library(purrr)
+#library(purrr)
 
 # 1) Ler arquivo
 alvos <- read_csv("HA_entradaAlvos.csv", col_names = FALSE, show_col_types = FALSE)
