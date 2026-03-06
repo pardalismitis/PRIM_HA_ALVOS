@@ -38,66 +38,117 @@
 # dplyr  → manipulação de dataframes
 # stringr → manipulação de strings com regex
 # tidyr  → transformação estrutural de tabelas
-# purrr  → programação funcional (não usado diretamente aqui,
-#          mas frequentemente necessário em pipelines similares)
 
 library(readr)
 library(dplyr)
 library(stringr)
 library(tidyr)
-#library(purrr)
 
-# 1) Ler arquivo
+# ============================================================
+# 1) Leitura do arquivo bruto
+# ============================================================
+
+# O arquivo de entrada possui apenas uma coluna contendo
+# linhas de texto extraídas do PDF.
 alvos <- read_csv("HA_entradaAlvos.csv", col_names = FALSE, show_col_types = FALSE)
 
-# 2) Garantir nome padrão
+# Padroniza o nome da coluna para facilitar manipulações posteriores
 colnames(alvos) <- "coluna"
 
-# Neste caso algumas UPs foram combinadas na mesma linha de texto e foi necessário um ajuste para separar
+# ============================================================
+# 2) Reconstrução do texto original
+# ============================================================
 
-# 3) colapsa tudo em um único texto
+# Em alguns casos, durante a extração do PDF,
+# múltiplas Unidades de Planejamento (UPs) acabam
+# sendo fragmentadas ou combinadas em linhas diferentes.
+#
+# Para permitir uma extração robusta baseada em padrões,
+# todo o texto é primeiro colapsado em uma única string.
+
 texto_unico <- alvos$coluna %>%
-  str_squish() %>%
-  str_c(collapse = " ")
+  str_squish() %>%        # remove espaços duplicados
+  str_c(collapse = " ")   # concatena todas as linhas
 
-# 4) regex que captura:
-# número seguido de espaço + texto
-# até encontrar outro número isolado
+# ============================================================
+# 3) Identificação dos blocos de UP
+# ============================================================
+
+# A expressão regular abaixo identifica blocos que seguem o padrão:
+#
+#    número_da_UP + texto associado
+#
+# O bloco termina quando aparece:
+#
+#    outro número isolado indicando nova UP
+#
+# Estrutura do padrão:
+#
+# (\\b\\d+\\b)      → captura o número da UP
+# \\s+              → espaço
+# (.*?)             → captura o texto associado
+# (?= ...)          → lookahead que detecta o início do próximo bloco
+
 padrao <- "(\\b\\d+\\b)\\s+(.*?)(?=\\s+\\d+\\s+(Fauna:|$)|$)"
 
 matches <- str_match_all(texto_unico, padrao)[[1]]
+
+# Constrói um dataframe contendo:
+#
+# ID    → número da UP
+# texto → bloco de texto correspondente
 
 resultado <- tibble(
   ID = matches[,2],
   texto = str_squish(matches[,3])
 ) %>%
+  # Mantém apenas blocos que realmente possuem seção Fauna
+  # (heurística para evitar capturas inválidas)
   filter(str_detect(texto, "Fauna:")) %>%  # mantém só blocos válidos
+  # Remove duplicatas eventualmente geradas pelo parsing
   distinct()
 
-# 5) Dividir em blocos
+# ============================================================
+# 4) Extração dos componentes temáticos
+# ============================================================
+
+# Cada bloco de texto contém subseções com rótulos como:
+#
+# Fauna:
+# Flora:
+# Fitofisionomias:
+# Ambientes singulares:
+#
+# Esta etapa padroniza os rótulos e extrai o conteúdo de cada um.
 
 resultado_blocos <- resultado %>%
   
-  # 1️⃣ Padronização preventiva
+# ----------------------------------------------------------
+# 4.1 Padronização preventiva de rótulos
+# ----------------------------------------------------------
   mutate(
     texto = texto %>%
+      # Normaliza variações de "Fitofisionomias"
       str_replace_all(
         regex("Fitofisionomia:|Fitofisionomias(?!:)", ignore_case = TRUE),
         "Fitofisionomias:"
       ) %>%
+      # Padroniza uso de hífens
       str_replace_all("\\s*-\\s*", "-") #\\s* = qualquer quantidade de espaço (inclusive zero)
   ) %>%
   
   mutate(
     texto = texto %>%
+      # Garante que "Flora" sempre possua dois pontos, sempre que for uma palavra isolada
       str_replace_all(
         regex("\\bFlora\\b(?!:)", ignore_case = TRUE),
         "Flora:"
       ) %>%
       str_replace_all("\\s*-\\s*", "-")
   ) %>%
-  
-  # 2️⃣ Extração dos blocos
+# ----------------------------------------------------------
+# 4.2 Extração dos blocos por componente
+# ----------------------------------------------------------
   mutate(
     Fauna = str_extract(texto, "Fauna:.*?(?=Flora:|Fitofisionomias:|Ambientes singulares:|$)"),
     
@@ -108,7 +159,10 @@ resultado_blocos <- resultado %>%
     Ambientes = str_extract(texto, "Ambientes singulares:.*?(?=Fauna:|Flora:|Fitofisionomias:|$)")
   ) %>%
   
-  # 3️⃣ Remover rótulos
+# ----------------------------------------------------------
+# 4.3 Remoção dos rótulos
+# ----------------------------------------------------------
+
   mutate(
     Fauna = str_remove(Fauna, "^Fauna:\\s*"),
     Flora = str_remove(Flora, "^Flora:\\s*"),
@@ -116,7 +170,19 @@ resultado_blocos <- resultado %>%
     Ambientes = str_remove(Ambientes, "^Ambientes singulares:\\s*")
   )
 
-# 6) Transformar em formato longo
+# ============================================================
+# 5) Transformação para formato longo
+# ============================================================
+
+# Converte a estrutura de colunas em formato longo.
+#
+# Exemplo:
+#
+# ID | Fauna | Flora
+#
+# torna-se:
+#
+# ID | Tipo | Conteudo
 
 alvos_long <- resultado_blocos %>%
   select(ID, Fauna, Flora, Fitofisionomias, Ambientes) %>%
@@ -125,11 +191,26 @@ alvos_long <- resultado_blocos %>%
     names_to = "Tipo",
     values_to = "Conteudo"
   ) %>%
+  # Remove registros vazios
   filter(!is.na(Conteudo)) %>%
+  
+# ----------------------------------------------------------
+# 5.1 Separação de múltiplos alvos
+# ----------------------------------------------------------
+
+# Muitos registros possuem múltiplos alvos separados por vírgula
+
   separate_rows(Conteudo, sep = ",") %>%
+  
+# ----------------------------------------------------------
+# 5.2 Limpeza textual
+# ----------------------------------------------------------
+
   mutate(
     Conteudo = str_trim(Conteudo),
+    # remove ponto e vírgula no final
     Conteudo = str_remove(Conteudo, ";+$"),
+    # remove pontos finais duplicados
     Conteudo = str_remove(Conteudo, "\\.+$")  # remove ponto(s) apenas no final
     #\\. → ponto literal
     #+ → um ou mais
@@ -137,14 +218,39 @@ alvos_long <- resultado_blocos %>%
   ) %>%
   filter(Conteudo != "")
 
-# Checagem
+# ============================================================
+# 6) Checagens exploratórias
+# ============================================================
+
+# Exibe todos os tipos identificados
 
 sort(unique(alvos_long$Tipo))
+
+# Exibe todos os alvos únicos
+
 sort(unique(alvos_long$Conteudo))
+
+# Estrutura do dataframe
+
 str(alvos_long)
+
+# Nome das colunas
+
 names(alvos_long)
 
-# 7) Correções
+# ============================================================
+# 7) Correções manuais conhecidas
+# ============================================================
+
+# Algumas inconsistências presentes no material original
+# exigem correções específicas.
+#
+# Estas correções incluem:
+#
+# • erros de digitação
+# • problemas de encoding
+# • nomes científicos quebrados
+# • rótulos institucionais incompletos
 
 correcoes <- tribble(
   ~Conteudo_antigo, ~Conteudo_novo,
@@ -167,12 +273,24 @@ correcoes <- tribble(
   "Bosque de los aFloramientos rocosos de la Amazonia Colombiana", "Bosque de los afloramientos rocosos de la Amazonia Colombiana"
 )
 
+# Aplica as correções ao dataframe principal
+
 alvos_long <- alvos_long %>%
   left_join(correcoes, by = c("Conteudo" = "Conteudo_antigo")) %>%
   mutate(Conteudo = coalesce(Conteudo_novo, Conteudo)) %>%
   select(-Conteudo_novo) %>%
   rename(UP = ID)
 
-# 8) Exportar
+# ============================================================
+# 8) Exportação do resultado final
+# ============================================================
+
+# O arquivo final contém:
+#
+# UP | Tipo | Conteudo
+#
+# Cada linha representa um alvo individual associado
+# a uma Unidade de Planejamento e a um componente temático.
+
 write_csv(alvos_long, "HA_saidaAlvosProcessado.csv")
 
