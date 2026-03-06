@@ -222,6 +222,34 @@ alvos_long <- resultado_blocos %>%
 # 6) Checagens exploratórias
 # ============================================================
 
+alvos_fauna <- alvos_long |>
+  filter(Tipo == "Fauna") |>
+  pull(Conteudo) |>
+  unique() |>
+  sort()
+alvos_fauna
+
+alvos_flora <- alvos_long |>
+  filter(Tipo == "Flora") |>
+  pull(Conteudo) |>
+  unique() |>
+  sort()
+alvos_flora
+
+alvos_ambientes <- alvos_long |>
+  filter(Tipo == "Ambientes") |>
+  pull(Conteudo) |>
+  unique() |>
+  sort()
+alvos_ambientes
+
+alvos_fitofisionomias <- alvos_long |>
+  filter(Tipo == "Fitofisionomias") |>
+  pull(Conteudo) |>
+  unique() |>
+  sort()
+alvos_fitofisionomias
+
 # Exibe todos os tipos identificados
 
 sort(unique(alvos_long$Tipo))
