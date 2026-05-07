@@ -6,6 +6,8 @@ Este repositório contém um pipeline em R desenvolvido para extrair, padronizar
 
 O objetivo é permitir análise, revisão técnica e integração com outras bases utilizadas nas análises da COESP/CGCON/DIBIO/ICMBio e possíveis interessados no uso dos dados.
 
+<img width="597" height="842" alt="image" src="https://github.com/user-attachments/assets/020bef15-ad6d-431e-9923-149418248654" />
+
 ------------------------------------------------------------------------
 
 ## Contexto
