@@ -322,5 +322,17 @@ alvos_long <- alvos_long %>%
 # Cada linha representa um alvo individual associado
 # a uma Unidade de Planejamento e a um componente temático.
 
+alvos_Integracao <- alvos_long %>%
+  select(Tipo,
+         Conteudo
+  ) %>%
+  distinct(Conteudo, .keep_all = TRUE) %>%
+  rename(
+    COMPONENTE = Tipo,
+    ALVO = Conteudo
+  )
+
+write_csv(alvos_Integracao, "alvos_Processados_HA.csv")
+
 write_csv(alvos_long, "HA_saidaAlvosProcessado.csv")
 
